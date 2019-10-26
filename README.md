@@ -21,7 +21,7 @@ Once you've done that, a Ledger CLI time entry has been generated in your `.conf
 
 All you need to do now is to start working on your activity.
 When you finish your _current activity_ it's time to *commit* the work you've done.
-This term is mutuated from the developer jargon, and it simply states that you're ready to save the work you've done by tagging it with a meaningful label describing the progress you've made in your project: the majority of time, this means that you actually *completed* a task, and thus the best method to put everything together is commiting you work with the task description as payload!
+This term is mutated from the developer jargon, and it simply states that you're ready to save the work you've done by tagging it with a meaningful label describing the progress you've made in your project: the majority of time, this means that you actually *completed* a task, and thus the best method to put everything together is committing you work with the task description as payload!
 
 This is the core of everything in DreamMate, so please let me repeat it once again:
 
@@ -36,25 +36,36 @@ Simply clone this repo and give execution permission to this file, then you can 
 ./dreammate.py --help
 ```
 
+### Possible Scenarios
+
+* Commit a paused project
+* Commit and already committed project
+
 ### Example usage
 
-- **9.00**: You sit down in front of your computer, ready to make something incredible and meaningful right inside your NeoVim editor. (Vim 8 is ok too...)
- `dm start myawesomeproject`
+- **9.00**: You sit down in front of your computer, ready to make something incredible and meaningful right inside your NeoVim editor.
+
+  `dm start myawesomeproject`
 
 
 - **10.15**: After more than 70 minutes of hard work, you've made all the way through a very though issue you were facing with some nasty CSS styling. So you are ready to commit your code. But what if you can commit **both** your code **and** your time journal you need to provide your employer for the monthly payroll? The answer is easy: *DreamMate*!
-`dm commit "Nasty CSS Styling bug fixed"`
+
+  `dm commit "Nasty CSS Styling bug fixed"`
 
 - **10.26**: You just finished you coffee break and you're ready to get back to work on `myawesomeproject` when one of your clients (the *scary* and *never happy* one) calls you yelling that he needs the WebAPI update you promised him 2 days before. Of course, this guys "rents" you hourly, so you need to keep track of the time you're spending on his tasks... Am I getting you hyped, am I?
-`dm start scaryunhappyproject`
+  
+  `dm start scaryunhappyproject`
 
 - **11.59**: The update took longer than expected, but now everything is setup and working. You're almost there for lunch, so what's let to do is to update the Ledger journal, commit the changes, write on Wrike, send an email to the boss with *detailed* reports... No more!
 `dm commit "Update completed for the main platform"`
 
 - **12.30**: It's time for the lunch! Just put everything in pause and see some reports today's work:
- `dm pause`
- `dm log myawesomeproject`
- `dm log scaryunhappyproject`
+
+  `dm pause`
+  
+  `dm log myawesomeproject`
+  
+  `dm log scaryunhappyproject`
 
 ### Git Integration
 

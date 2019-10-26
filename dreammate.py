@@ -19,6 +19,8 @@ Available actions:
   pause     Pause current tracking by closing current time entry (with placeholder)
   commit    Ends currently open (last) time entry with the appropriate payload
   log       Get all time entries for a given project
+  current   Get current active project
+  restart   Restart a project after a pause. A custom datetime can be set
 '''
 
 def get_scm_commit_commands(scm, commit_message):
@@ -30,7 +32,47 @@ def get_scm_commit_commands(scm, commit_message):
     else:
         return []
 
+class ActiveProject(object):
+    def __init__(self, name, start_string = "", end_string=""):
+        self.name = name
+        self.start = self.parse_date_or_none(start_string)
+        self.end = self.parse_date_or_none(end_string)
+        self.isPaused = self.end != None
+
+    def __str__(self):
+        return "{}: [{}, {}] P: {}".format(
+            self.name,
+            self.start,
+            self.end,
+            self.isPaused
+        )
+
+    def parse_date_or_none(self, date_string):
+        if date_string == "":
+            return None
+
+        date_string = date_string.split("###")[0].strip()
+
+        date_format = "{} %Y/%m/%d %H:%M:%S".format(date_string[0])
+
+        return datetime.strptime(date_string, date_format)
+
+
 class DreamMate(object):
+    """
+    Lookup table with the value of dry_run
+    (e.g active project not found triggers an exit)
+    for each action
+    """
+    active_project = None
+    actions_active_project_dry_run = {
+        "start": True,
+        "commit": False,
+        "pause": False,
+        "current": False,
+        "restart": True
+    }
+
     def __init__(self):
         parser = argparse.ArgumentParser(
             description="Your best Task Manager tool",
@@ -48,6 +90,8 @@ class DreamMate(object):
             parser.print_help()
             exit(1)
 
+        self.store_active_project_or_exit(args.action)
+
         # Invoke action's relative function
         getattr(self, args.action)()
 
@@ -62,25 +106,22 @@ class DreamMate(object):
 
         args = parser.parse_args(sys.argv[2:])
 
-        active_project = self.find_last_active_project("create", dry_run=True)
-
-        if (active_project != ""):
+        if self.active_project != None:
             self.pause()
 
-        start_time = self.get_time_string("start", args.project)
+        new_project = ActiveProject(
+            args.project,
+        )
 
-        time_journal = self.load_time_journal('a')
-        time_journal.write(start_time)
+        self.doStart(new_project, datetime.now())
 
     def pause(self):
-        active_project = self.find_last_active_project("pause")
+        if self.active_project.isPaused:
+            print("ERROR: Cannot pause already paused project")
+            exit(1)
 
-        print("Pausing project: {}".format(active_project))
-
-        end_time = self.get_time_string("end")
-
-        time_journal = self.load_time_journal('a')
-        time_journal.write(end_time)
+        print("Pausing project: {}".format(self.active_project))
+        self.doEnd(self.active_project, datetime.now())
 
     def commit(self):
         parser = argparse.ArgumentParser(
@@ -92,10 +133,14 @@ class DreamMate(object):
 
         args = parser.parse_args(sys.argv[2:])
 
-        active_project = self.find_last_active_project("commit")
-        active_project_conf = self.load_project_configuration(active_project)
+        if self.active_project.isPaused:
+            print("ERROR: Cannot commit a paused active project, restart it beforehand")
+            print("dm restart -d <restart_date>")
+            exit(1)
 
-        if active_project_conf['isCode']:
+        active_project_conf = self.load_project_configuration(self.active_project)
+
+        if False and active_project_conf['isCode']:
             commit_commands = get_scm_commit_commands(
                 active_project_conf['scm'],
                 args.message
@@ -103,7 +148,7 @@ class DreamMate(object):
 
             for command in commit_commands:
                 try:
-                    command_output = subprocess.check_output(
+                    subprocess.check_output(
                         command,
                         stderr=subprocess.STDOUT,
                         cwd=os.path.expanduser(active_project_conf['root'])
@@ -113,21 +158,24 @@ class DreamMate(object):
                     print(e.output);
                     exit(1)
 
-        end_time = self.get_time_string("end")
-
-        time_journal = self.load_time_journal('a')
-        time_journal.write(end_time)
-        time_journal.close()
+        self.doEnd(self.active_project, datetime.now())
 
         # Substitude each occurrence of ###<current_project>### with
         # <current_project>  <message>
-        project_placeholder = "###{}###".format(active_project)
-        project_account_payload = "{}  {}".format(active_project, args.message)
+        project_placeholder = "###{}###".format(self.active_project.name)
+        project_account_payload = "{}  {}".format(self.active_project.name, args.message)
 
         with fileinput.FileInput("time.ledger", inplace=True, backup='.bak') as file:
             for line in file:
-                print(line.replace(project_placeholder, project_account_payload), end='')
-        print("Committing project: {} with message: {}".format(active_project, args.message))
+                print(line.replace(
+                    project_placeholder,
+                    project_account_payload
+                ), end='')
+
+        print("Committing project: {} with message: {}".format(self.active_project, args.message))
+
+    def current(self):
+        print("Current project: {}".format(self.active_project))
 
     def log(self):
         parser = argparse.ArgumentParser(
@@ -158,15 +206,86 @@ class DreamMate(object):
         for line in lines:
             print(line)
 
+    def restart(self):
+        parser = argparse.ArgumentParser(
+            description="Restart the current project so that changes can be committed. A custom datetime can be set as restart time",
+            usage="dm restart -d <datetime> -p <project>"
+        )
+
+        parser.add_argument(
+            '-d',
+            '--datetime',
+            help="Datetime in Y/m/d H:M to use as a restart date"
+        )
+        parser.add_argument(
+            '-p',
+            '--project',
+            help="Project to restart if current project is not paused but already committed"
+        )
+
+        args = parser.parse_args(sys.argv[2:])
+
+        restart_datetime = datetime.now()
+
+        if (args.datetime != None):
+            restart_datetime = datetime.strptime(args.datetime, "%Y/%m/%d %H:%M")
+
+        if self.active_project == None or not self.active_project.isPaused:
+            # Start a new task with current date set
+            if not args.project:
+                print("ERROR: Cannot restart active project: no active project!")
+                print("Please provide one with -p <project_name>")
+                exit(1)
+
+            self.doStart(args.project, restart_datetime)
+            project_restarted = args.project
+        else:
+            # Active project is paused, simply resart it with restart_datetime
+            project_restarted = self.active_project
+
+            if args.project != None:
+                project_restarted = ActiveProject(
+                    args.project
+                )
+
+            self.doStart(project_restarted, restart_datetime)
+
+        print("Restarted project: {} on {}".format(project_restarted.name, restart_datetime))
+
     # UTILS
+    def store_active_project_or_exit(self, action):
+        self.active_project = None
+
+        if not action in self.actions_active_project_dry_run.keys():
+            return
+
+        self.active_project = self.find_last_active_project(
+            action,
+            dry_run=self.actions_active_project_dry_run[action]
+        )
+
     def load_time_journal(self, mode = 'r'):
         return open("time.ledger", mode)
 
-    def get_time_string(self, side, project = ""):
+    def doStart(self, project, entry_time):
+        start_time = self.get_time_string("start", entry_time, project)
+
+        time_journal = self.load_time_journal('a')
+        time_journal.write(start_time)
+        time_journal.close()
+
+    def doEnd(self, project, entry_time):
+        end_time = self.get_time_string("end", entry_time, project)
+
+        time_journal = self.load_time_journal('a')
+        time_journal.write(end_time)
+        time_journal.close()
+
+    def get_time_string(self, side, entry_time, project = ""):
         if side == "start":
-            return datetime.now().strftime("i %Y/%m/%d %H:%M:%S ###{}###\n".format(project))
+            return entry_time.strftime("i %Y/%m/%d %H:%M:%S ###{}###\n".format(project.name))
         elif side == "end":
-            return datetime.now().strftime("o %Y/%m/%d %H:%M:%S\n")
+            return entry_time.strftime("o %Y/%m/%d %H:%M:%S\n")
         else:
             print("ERROR: Unexpected side: {}".format(side))
             exit(1)
@@ -179,16 +298,23 @@ class DreamMate(object):
         time_entries = time_journal.readlines()
         time_entries.reverse()
 
-        active_project = ""
+        active_project = None
 
-        for line in time_entries:
+        for index, line in enumerate(time_entries):
             project_found = active_project_re.findall(line)
 
             if (len(project_found)):
-                active_project = project_found[0]
+                active_project = ActiveProject(
+                    project_found[0],
+                    line,
+                    # if line is the last line,
+                    # it means that this project has not been
+                    # paused
+                    time_entries[index-1] if index > 0 else ""
+                )
                 break
 
-        if active_project == "" and not dry_run:
+        if active_project == None and not dry_run:
             print("ERROR: No current project found, nothing to {}!".format(action))
             exit(1)
 
@@ -196,7 +322,7 @@ class DreamMate(object):
 
     def load_project_configuration(self, project_name):
         try:
-            file_content = open("{}.yaml".format(project_name), 'r')
+            file_content = open("{}.yaml".format(project_name.name), 'r')
 
             try:
                 config = yaml.safe_load(file_content)
