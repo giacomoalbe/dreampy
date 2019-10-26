@@ -7,8 +7,8 @@ import re
 import subprocess
 import fileinput
 import yaml
-import terminaltables
 
+from terminaltables import AsciiTable, SingleTable
 from todotxt import TodoFile, TodoEntry
 from typing import List
 from datetime import datetime, timedelta
@@ -158,7 +158,7 @@ class TaskManager(object):
             # Add task and exit
             task_entry = TodoEntry("")
 
-            task_entry.add_tag("task", args.task)
+            task_entry.add_tag("task", args.task.replace(" ", "_"))
             task_entry.add_project(task_project.name)
             task_entry.add_context(task_context)
             task_entry.created_date = datetime.now()
@@ -193,7 +193,7 @@ class TaskManager(object):
 
             task_entry = TodoEntry("")
 
-            task_entry.add_tag("task", task_description)
+            task_entry.add_tag("task", task_description.replace(" ", "_"))
             task_entry.add_project(task_project.name)
             task_entry.add_context(task_context)
             task_entry.priority = task_priority
@@ -242,11 +242,29 @@ class TaskManager(object):
             print("No entries")
             exit(0)
 
-        for index, entry in enumerate(todo_file.todo_entries):
+        table_data = [
+            ["X", "P", "Date", "CTX", "Task"],
+        ]
+
+        entry: TodoEntry
+
+        for index, entry  in enumerate(todo_file.todo_entries):
             if limit > -1 and index == limit:
                 break
 
-            print(entry)
+            formatted_date = datetime.strptime(entry.created_date, "%Y-%m-%d")
+            formatted_date = datetime.strftime(formatted_date, "%d/%m/%y")
+
+            table_data.append([
+                "x" if entry.completed else "",
+                entry.priority,
+                formatted_date,
+                next(iter(entry.contexts))[:3].upper(),
+                entry.tags['task'].replace("_", " ")
+            ])
+
+        table = SingleTable(table_data)
+        print(table.table)
 
     def delete(self):
         pass
@@ -495,7 +513,6 @@ class DreamMate(object):
 
     def tasks(self):
         taskManager = TaskManager(self.active_project, sys.argv[2:])
-
 
     # UTILS
     def store_active_project_or_exit(self, action):
