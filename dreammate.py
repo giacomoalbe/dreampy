@@ -11,7 +11,7 @@ import terminaltables
 
 from todotxt import TodoFile, TodoEntry
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 usage_string = '''
 
@@ -238,6 +238,10 @@ class TaskManager(object):
 
         todo_file = self.load_todo_file(project)
 
+        if len(todo_file.todo_entries) == 0:
+            print("No entries")
+            exit(0)
+
         for index, entry in enumerate(todo_file.todo_entries):
             if limit > -1 and index == limit:
                 break
@@ -259,7 +263,7 @@ class TaskManager(object):
             print("File: {} not found, creating it".format(todo_file_name))
 
             file_handle = open(todo_file_name, "w")
-            file_handle.write()
+            file_handle.write("")
 
             todo_file.load()
 
@@ -387,7 +391,9 @@ class DreamMate(object):
                     print(e.output);
                     exit(1)
 
-        self.doEnd(self.active_project, datetime.now())
+        end_time = datetime.now()
+
+        self.doEnd(self.active_project, end_time)
 
         # Substitude each occurrence of ###<current_project>### with
         # <current_project>  <message>
@@ -400,6 +406,12 @@ class DreamMate(object):
                     project_placeholder,
                     project_account_payload
                 ), end='')
+
+
+
+
+
+        self.doStart(self.active_project, end_time + timedelta(seconds=10))
 
         print("Committing project: {} with message: {}".format(self.active_project, args.message))
 
@@ -466,8 +478,8 @@ class DreamMate(object):
                 print("Please provide one with -p <project_name>")
                 exit(1)
 
-            self.doStart(args.project, restart_datetime)
-            project_restarted = args.project
+            project_restarted = ActiveProject(args.project)
+            self.doStart(project_restarted, restart_datetime)
         else:
             # Active project is paused, simply resart it with restart_datetime
             project_restarted = self.active_project
@@ -514,7 +526,7 @@ class DreamMate(object):
         time_journal.write(end_time)
         time_journal.close()
 
-    def get_time_string(self, side, entry_time, project = ""):
+    def get_time_string(self, side, entry_time: datetime, project: ActiveProject = None):
         if side == "start":
             return entry_time.strftime("i %Y/%m/%d %H:%M:%S ###{}###\n".format(project.name))
         elif side == "end":
