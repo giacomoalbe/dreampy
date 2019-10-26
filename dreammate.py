@@ -106,7 +106,16 @@ class DreamMate(object):
 
         args = parser.parse_args(sys.argv[2:])
 
-        if self.active_project != None:
+        if self.active_project.name == args.project:
+            print("ERROR: Cannot start a project with the same name of the currently active project")
+            print("Current project: {}\nProject to be started: {}".format(
+                self.active_project.name,
+                args.project
+            ))
+            exit(1)
+
+
+        if self.active_project != None and not self.active_project.isPaused:
             self.pause()
 
         new_project = ActiveProject(
@@ -114,6 +123,8 @@ class DreamMate(object):
         )
 
         self.doStart(new_project, datetime.now())
+
+        print("Started project: {}".format(self.active_project.name))
 
     def pause(self):
         if self.active_project.isPaused:
