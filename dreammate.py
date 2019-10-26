@@ -7,7 +7,10 @@ import re
 import subprocess
 import fileinput
 import yaml
+import terminaltables
 
+from todotxt import TodoFile, TodoEntry
+from typing import List
 from datetime import datetime
 
 usage_string = '''
@@ -21,7 +24,21 @@ Available actions:
   log       Get all time entries for a given project
   current   Get current active project
   restart   Restart a project after a pause. A custom datetime can be set
+  tasks     Subcommand for handling everything related to tasks
+
 '''
+
+tasks_usage_string = '''
+
+dm tasks <action> [<args>]
+
+Available actions:
+  add       Add a task to a project (default to active project)
+  list      List all the tasks for a given project (default to active project)
+  delete    Delete a task of a given project by providing its id
+
+'''
+
 
 def get_scm_commit_commands(scm, commit_message):
     if scm == 'git':
@@ -57,6 +74,206 @@ class ActiveProject(object):
 
         return datetime.strptime(date_string, date_format)
 
+class TaskManager(object):
+    def __init__(self, active_project: ActiveProject, cli_args: List[str]):
+        parser = argparse.ArgumentParser(
+            description="Manage task related activities",
+            usage=tasks_usage_string
+        )
+
+        parser.add_argument(
+            "action",
+            help="Action to take"
+        )
+
+        args, _ = parser.parse_known_args(cli_args[0:1])
+
+        # Action lookup inside class methods
+        if not hasattr(self, args.action):
+            print('ERROR: Action not recognized: {}'.format(args.action))
+            print('')
+            parser.print_help()
+            exit(1)
+
+        self.cli_args = cli_args[1:]
+        self.active_project = active_project
+
+        # Invoke action's relative function
+        getattr(self, args.action)()
+
+        pass
+
+    def add(self):
+        parser = argparse.ArgumentParser(
+            description="Add different tasks to a project (default to active_project)",
+            usage="dm tasks add [-h] [-p <project_name>] [-c <context>] [-r <priority>] [<task>]"
+        )
+
+        parser.add_argument(
+            "-p",
+            "--project",
+            help="Project to add tasks to"
+        )
+
+        parser.add_argument(
+            "-c",
+            "--context",
+            help="Context to add to the task (as defined in the project file configuration)"
+        )
+
+        parser.add_argument(
+            "-r",
+            "--priority",
+            choices=["A", "B", "C", "D", "E", "F", "G"],
+            help="Priority of the task to create"
+        )
+
+        parser.add_argument(
+            'task',
+            nargs='?',
+            default=None
+        )
+
+        args = parser.parse_args(self.cli_args)
+
+        self.cli_args = self.cli_args[1:]
+
+        task_project = None
+        task_context = None
+        task_priority = None
+        task_description = None
+
+        if args.project:
+            # TODO: check project exists
+            task_project = ActiveProject(args.project)
+
+        if args.context:
+            # TODO: check context exists in project file
+            task_context = args.context
+
+        if args.priority:
+            task_priority = args.priority
+
+        if args.task and args.context and args.project:
+            # Add task and exit
+            task_entry = TodoEntry("")
+
+            task_entry.add_tag("task", args.task)
+            task_entry.add_project(task_project.name)
+            task_entry.add_context(task_context)
+            task_entry.created_date = datetime.now()
+            task_entry.priority = task_priority
+
+            self.save_tasks([task_entry], task_project)
+
+            exit(0)
+
+        save_tasks = False
+        tasks: List[TodoEntry] = []
+
+        while True:
+            task_description: str = input("Insert task description (x to discard, s to save): ")
+
+            if (task_description.strip().lower() == 'x'):
+                break
+
+            if (task_description.strip().lower() == 's'):
+                save_tasks = True
+                break
+
+            if not task_project:
+                project_name = input("Insert task project: ")
+                task_project = ActiveProject(project_name)
+
+            if not task_context:
+                task_context = input("Insert task context: ")
+
+            if not task_priority:
+                task_priority: str = input("Insert task priority [A-G]: ")
+
+            task_entry = TodoEntry("")
+
+            task_entry.add_tag("task", task_description)
+            task_entry.add_project(task_project.name)
+            task_entry.add_context(task_context)
+            task_entry.priority = task_priority
+            task_entry.created_date = datetime.now()
+
+            tasks.append(task_entry)
+
+        if save_tasks:
+            self.save_tasks(tasks, task_project)
+
+        print("No tasks added")
+
+    def list(self):
+        parser = argparse.ArgumentParser(
+            description="Get all task for a given project (defaults to active project)",
+            usage="dm tasks list [-h] [-p <project_name>] [-n <number>]"
+        )
+
+        parser.add_argument(
+            "-p",
+            "--project",
+            help="Project to show all tasks of"
+        )
+
+        parser.add_argument(
+            "-n",
+            "--number",
+            type=int,
+            help="Number of tasks to print to output"
+        )
+
+        args, _ = parser.parse_known_args(self.cli_args)
+
+        limit = -1
+        project: ActiveProject = self.active_project
+
+        if args.number:
+            limit = args.number
+
+        if args.project:
+            project = ActiveProject(args.project)
+
+        todo_file = self.load_todo_file(project)
+
+        for index, entry in enumerate(todo_file.todo_entries):
+            if limit > -1 and index == limit:
+                break
+
+            print(entry)
+
+    def delete(self):
+        pass
+
+    def load_todo_file(self, project: ActiveProject):
+        todo_file: TodoFile = TodoFile("{}_TODO.txt".format(project.name))
+
+        try:
+            todo_file.load()
+        except:
+            # Create file if it does not exists
+            todo_file_name = "{}_TODO.txt".format(project.name)
+
+            print("File: {} not found, creating it".format(todo_file_name))
+
+            file_handle = open(todo_file_name, "w")
+            file_handle.write()
+
+            todo_file.load()
+
+        return todo_file
+
+    def save_tasks(self, tasks: List[TodoEntry], project: ActiveProject):
+        todo_file = self.load_todo_file(project)
+
+        todo_file.add_entries(tasks, with_sort=True)
+
+        todo_file.save()
+
+        print("{} tasks saved in project {}".format(len(tasks), project.name))
+        exit(0)
 
 class DreamMate(object):
     """
@@ -70,7 +287,8 @@ class DreamMate(object):
         "commit": False,
         "pause": False,
         "current": False,
-        "restart": True
+        "restart": True,
+        "tasks": True,
     }
 
     def __init__(self):
@@ -151,7 +369,7 @@ class DreamMate(object):
 
         active_project_conf = self.load_project_configuration(self.active_project)
 
-        if False and active_project_conf['isCode']:
+        if active_project_conf['isCode']:
             commit_commands = get_scm_commit_commands(
                 active_project_conf['scm'],
                 args.message
@@ -262,6 +480,10 @@ class DreamMate(object):
             self.doStart(project_restarted, restart_datetime)
 
         print("Restarted project: {} on {}".format(project_restarted.name, restart_datetime))
+
+    def tasks(self):
+        taskManager = TaskManager(self.active_project, sys.argv[2:])
+
 
     # UTILS
     def store_active_project_or_exit(self, action):
