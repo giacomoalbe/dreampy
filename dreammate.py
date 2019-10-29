@@ -13,6 +13,8 @@ from todotxt import TodoFile, TodoEntry
 from typing import List
 from datetime import datetime, timedelta
 
+CONFIG_FOLDER="~/.config/dreammate"
+
 usage_string = '''
 
 dm <action> [<args>]
@@ -270,17 +272,21 @@ class TaskManager(object):
         pass
 
     def load_todo_file(self, project: ActiveProject):
-        todo_file: TodoFile = TodoFile("{}_TODO.txt".format(project.name))
+        if project == None:
+            print("ERROR: No active project & no project set. Use -p to select a project")
+            exit(1)
+
+        todo_file_path = "{}/{}_TODO.txt".format(CONFIG_FOLDER, project.name)
+        todo_file_path = os.path.expanduser(todo_file_path)
 
         try:
+            todo_file: TodoFile = TodoFile(todo_file_path)
             todo_file.load()
         except:
             # Create file if it does not exists
-            todo_file_name = "{}_TODO.txt".format(project.name)
+            print("File: {} not found, creating it".format(todo_file_path))
 
-            print("File: {} not found, creating it".format(todo_file_name))
-
-            file_handle = open(todo_file_name, "w")
+            file_handle = open(todo_file_path, "w")
             file_handle.write("")
 
             todo_file.load()
@@ -346,7 +352,7 @@ class DreamMate(object):
 
         args = parser.parse_args(sys.argv[2:])
 
-        if self.active_project.name == args.project:
+        if self.active_project != None and self.active_project.name == args.project:
             print("ERROR: Cannot start a project with the same name of the currently active project")
             print("Current project: {}\nProject to be started: {}".format(
                 self.active_project.name,
@@ -364,7 +370,7 @@ class DreamMate(object):
 
         self.doStart(new_project, datetime.now())
 
-        print("Started project: {}".format(self.active_project.name))
+        print("Started project: {}".format(new_project.name))
 
     def pause(self):
         if self.active_project.isPaused:
@@ -527,7 +533,18 @@ class DreamMate(object):
         )
 
     def load_time_journal(self, mode = 'r'):
-        return open("time.ledger", mode)
+        fileHandle = None;
+        config_folder_path = os.path.expanduser("{}".format(CONFIG_FOLDER))
+        ledger_file_path = "{}/time.ledger".format(config_folder_path)
+
+        if not os.path.exists(ledger_file_path):
+            if not os.path.exists(config_folder_path):
+                os.mkdir(config_folder_path)
+
+            fileHandle = open(ledger_file_path, "w")
+            fileHandle.write("")
+
+        return open(ledger_file_path, mode)
 
     def doStart(self, project, entry_time):
         start_time = self.get_time_string("start", entry_time, project)
