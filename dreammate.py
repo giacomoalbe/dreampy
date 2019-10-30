@@ -9,6 +9,7 @@ import fileinput
 import yaml
 import curses
 import getch
+import uuid
 
 from blessed import Terminal
 from terminaltables import AsciiTable, SingleTable
@@ -162,7 +163,9 @@ class TaskManager(object):
             task_priority = args.priority
 
         if args.task and args.context and args.project:
-            # Add task and exit
+            """
+            Add task and exit
+            """
             task_entry = TodoEntry("")
 
             task_entry.add_tag("task", args.task.replace(" ", "_"))
@@ -181,26 +184,27 @@ class TaskManager(object):
         while True:
             task_description: str = input("Insert task description (x to discard, s to save): ")
 
-            if (task_description.strip().lower() == 'x'):
+            if (task_description.strip().lower() == 'x' or task_description.strip().lower() == 'q'):
                 break
 
             if (task_description.strip().lower() == 's'):
                 save_tasks = True
                 break
 
-            if not task_project:
+            if not args.project:
                 project_name = input("Insert task project: ")
                 task_project = ActiveProject(project_name)
 
-            if not task_context:
+            if not args.context:
                 task_context = input("Insert task context: ")
 
-            if not task_priority:
+            if not args.priority:
                 task_priority: str = input("Insert task priority [A-G]: ")
 
             task_entry = TodoEntry("")
 
             task_entry.add_tag("task", task_description.replace(" ", "_"))
+            task_entry.add_tag("id", uuid.uuid4().hex[:6])
             task_entry.add_project(task_project.name)
             task_entry.add_context(task_context)
             task_entry.priority = task_priority
@@ -251,10 +255,11 @@ class TaskManager(object):
         todo_file = self.load_todo_file(project)
 
         if len(todo_file.todo_entries) == 0:
-            return "No entries"
+            print("No entries")
+            exit(1)
 
         table_data = [
-            ["X", "P", "Date", "CTX", "Task"],
+            ["X", "ID", "P", "Date", "CTX", "Task"],
         ]
 
         entry: TodoEntry
@@ -267,6 +272,7 @@ class TaskManager(object):
 
             table_data.append([
                 "x" if entry.completed else "",
+                entry.tags.get('id', ''),
                 entry.priority,
                 formatted_date,
                 next(iter(entry.contexts))[:3].upper(),
@@ -396,11 +402,9 @@ class DreamMate(object):
 
     def commit(self):
         parser = argparse.ArgumentParser(
-            description="Ends current activity on current project by setting a payload",
-            usage="dm commit <message> [<args>]"
+            description="Ends current activity on current project by choosing a task to set done",
+            usage="dm commit [<args>]"
         )
-
-        parser.add_argument('message', help="Message to use as payload")
 
         args = parser.parse_args(sys.argv[2:])
 
@@ -419,9 +423,23 @@ class DreamMate(object):
         save_choice = False
         table_rows = tasks.table.split("\n")
         is_tasks_loop = True
+        char = 0
 
         while is_tasks_loop:
+            print("")
+            print("Select a task to commit using arrows")
+            print("{}Press Enter to save{}".format(t.green, t.normal))
+            print("{}Q or X to discard{}".format(t.red, t.normal))
             print(tasks.table)
+
+            if selected_task_index != -1:
+                selected_task_description = tasks.table_data[selected_task_index+1][4]
+            else:
+                selected_task_description = "No task selected"
+
+            print("")
+            print(" " * t.width, end="\r")
+            print("{}Choosen task:{} {}".format(t.bold, t.normal, selected_task_description))
 
             char = getch.getch()
 
@@ -456,15 +474,17 @@ class DreamMate(object):
                 save_choice == False
                 is_tasks_loop = False
 
-            print("                                      ", end='\r')
-            print("Hai cliccato: {} Indice: {}".format(ord(char), selected_task_index))
-
             if is_tasks_loop:
-                print(t.move_up, end='\r')
+                # Account for selected task reminder
+                print(t.move_up * 2, end='\r')
+                # Account for task list
                 print(t.move_up * len(tasks.table.split("\n")), end="\r")
+                # Account for header
+                print(t.move_up * 4, end='\r')
 
         if save_choice:
             print("Saving choice")
+            print("Task Id: {}".format(tasks.table_data[selected_task_index+1][1]))
         else:
             print("Cancel choice")
         return
