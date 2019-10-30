@@ -29,12 +29,13 @@ This is the core of everything in DreamMate, so please let me repeat it once aga
 
 ### Installation
 
-No package management has been setup yet. So you just need to have a working copy of Python3 on your system and you're ready to go.
+No package management has been setup yet.
 
-Simply clone this repo and give execution permission to this file, then you can easily use dm as:
-```
-./dreammate.py --help
-```
+For installing the development version on `DreamMate` you need to have [*Pipenv*](https://pipenv.kennethreitz.org/en/latest/) installed on you system. 
+
+With that, in order to get all the needed dependencies and everything setup, it is enough to cd into the dreammate folder and run:
+
+`pipenv install`
 
 ### Possible Scenarios
 

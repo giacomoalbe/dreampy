@@ -7,7 +7,10 @@ import re
 import subprocess
 import fileinput
 import yaml
+import curses
+import getch
 
+from blessed import Terminal
 from terminaltables import AsciiTable, SingleTable
 from todotxt import TodoFile, TodoEntry
 from typing import List
@@ -40,7 +43,6 @@ Available actions:
   delete    Delete a task of a given project by providing its id
 
 '''
-
 
 def get_scm_commit_commands(scm, commit_message):
     if scm == 'git':
@@ -77,7 +79,10 @@ class ActiveProject(object):
         return datetime.strptime(date_string, date_format)
 
 class TaskManager(object):
-    def __init__(self, active_project: ActiveProject, cli_args: List[str]):
+    def __init__(self):
+        pass
+
+    def parse_args(self, active_project: ActiveProject, cli_args: List[str]):
         parser = argparse.ArgumentParser(
             description="Manage task related activities",
             usage=tasks_usage_string
@@ -238,18 +243,21 @@ class TaskManager(object):
         if args.project:
             project = ActiveProject(args.project)
 
+        tasks = self.get_tasks_list(project, limit)
+
+        print(tasks.table)
+
+    def get_tasks_list(self, project: ActiveProject, limit: int, only_ascii: bool = False):
         todo_file = self.load_todo_file(project)
 
         if len(todo_file.todo_entries) == 0:
-            print("No entries")
-            exit(0)
+            return "No entries"
 
         table_data = [
             ["X", "P", "Date", "CTX", "Task"],
         ]
 
         entry: TodoEntry
-
         for index, entry  in enumerate(todo_file.todo_entries):
             if limit > -1 and index == limit:
                 break
@@ -265,8 +273,12 @@ class TaskManager(object):
                 entry.tags['task'].replace("_", " ")
             ])
 
-        table = SingleTable(table_data)
-        print(table.table)
+        if only_ascii:
+            table = AsciiTable(table_data)
+        else:
+            table = SingleTable(table_data)
+
+        return table
 
     def delete(self):
         pass
@@ -320,6 +332,8 @@ class DreamMate(object):
     }
 
     def __init__(self):
+        self.task_manager = TaskManager()
+
         parser = argparse.ArgumentParser(
             description="Your best Task Manager tool",
             usage=usage_string
@@ -397,6 +411,64 @@ class DreamMate(object):
 
         active_project_conf = self.load_project_configuration(self.active_project)
 
+        tasks = self.task_manager.get_tasks_list(self.active_project, -1)
+
+        t = Terminal()
+
+        selected_task_index = -1;
+        save_choice = False
+        table_rows = tasks.table.split("\n")
+        is_tasks_loop = True
+
+        while is_tasks_loop:
+            print(tasks.table)
+
+            char = getch.getch()
+
+            # Up arrow
+            if ord(char) == 65:
+                if selected_task_index != -1:
+                    # Unselect previousely selected index
+                    tasks.table_data[selected_task_index + 1][0] = ""
+
+                selected_task_index -= 1
+                selected_task_index = max(selected_task_index, 0)
+
+                tasks.table_data[selected_task_index + 1][0] = "*"
+
+            # Down arrow
+            elif ord(char) == 66:
+                if selected_task_index != -1:
+                    # Unselect previousely selected index
+                    tasks.table_data[selected_task_index + 1][0] = ""
+
+                selected_task_index += 1
+                selected_task_index = min(selected_task_index, len(tasks.table_data) - 1 - 1)
+
+                tasks.table_data[selected_task_index + 1][0] = "*"
+
+            elif ord(char) == 10:
+                # Enter
+                save_choice = True
+                is_tasks_loop = False
+            elif ord(char) == 113:
+                # q
+                save_choice == False
+                is_tasks_loop = False
+
+            print("                                      ", end='\r')
+            print("Hai cliccato: {} Indice: {}".format(ord(char), selected_task_index))
+
+            if is_tasks_loop:
+                print(t.move_up, end='\r')
+                print(t.move_up * len(tasks.table.split("\n")), end="\r")
+
+        if save_choice:
+            print("Saving choice")
+        else:
+            print("Cancel choice")
+        return
+
         if active_project_conf['isCode']:
             commit_commands = get_scm_commit_commands(
                 active_project_conf['scm'],
@@ -430,10 +502,6 @@ class DreamMate(object):
                     project_placeholder,
                     project_account_payload
                 ), end='')
-
-
-
-
 
         self.doStart(self.active_project, end_time + timedelta(seconds=10))
 
@@ -518,7 +586,7 @@ class DreamMate(object):
         print("Restarted project: {} on {}".format(project_restarted.name, restart_datetime))
 
     def tasks(self):
-        taskManager = TaskManager(self.active_project, sys.argv[2:])
+        self.task_manager.parse_args(self.active_project, sys.argv[2:])
 
     # UTILS
     def store_active_project_or_exit(self, action):
