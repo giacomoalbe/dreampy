@@ -286,6 +286,22 @@ class TaskManager(object):
 
         return table
 
+    def get_task(self, project: ActiveProject, task_id: str) -> TodoEntry:
+        todo_file = self.load_todo_file(project)
+
+        if len(todo_file.todo_entries) == 0:
+            return None
+
+        try:
+            choosen_task = next(t for t in todo_file.todo_entries if t.tags['id'] == task_id)
+            choosen_task.completed = True
+
+            todo_file.save()
+
+            return choosen_task
+        except:
+            return None
+
     def delete(self):
         pass
 
@@ -413,15 +429,12 @@ class DreamMate(object):
             print("dm restart -d <restart_date>")
             exit(1)
 
-        active_project_conf = self.load_project_configuration(self.active_project)
-
         tasks = self.task_manager.get_tasks_list(self.active_project, -1)
 
         t = Terminal()
 
-        selected_task_index = -1;
+        selected_task_index = -1
         save_choice = False
-        table_rows = tasks.table.split("\n")
         is_tasks_loop = True
         char = 0
 
@@ -482,17 +495,28 @@ class DreamMate(object):
                 # Account for header
                 print(t.move_up * 4, end='\r')
 
+        choosen_task = None
+
         if save_choice:
             print("Saving choice")
-            print("Task Id: {}".format(tasks.table_data[selected_task_index+1][1]))
+
+            choosed_task_id = tasks.table_data[selected_task_index+1][1]
+
+            # Task look up
+            choosen_task = self.task_manager.get_task(self.active_project, choosed_task_id)
         else:
             print("Cancel choice")
-        return
+            exit(0)
+
+        context = list(choosen_task.contexts)[0]
+        commit_msg = "{} | {}".format(context, choosen_task.tags['task'].replace("_", " "))
+
+        active_project_conf = self.load_project_configuration(self.active_project)
 
         if active_project_conf['isCode']:
             commit_commands = get_scm_commit_commands(
                 active_project_conf['scm'],
-                args.message
+                commit_msg
             )
 
             for command in commit_commands:
@@ -504,7 +528,7 @@ class DreamMate(object):
                     )
 
                 except subprocess.CalledProcessError as e:
-                    print(e.output);
+                    print(e.output)
                     exit(1)
 
         end_time = datetime.now()
@@ -516,7 +540,10 @@ class DreamMate(object):
         project_placeholder = "###{}###".format(self.active_project.name)
         project_account_payload = "{}  {}".format(self.active_project.name, args.message)
 
-        with fileinput.FileInput("time.ledger", inplace=True, backup='.bak') as file:
+        ledger_file_path = self.load_time_journal(mode='r', only_path = True)
+        print(ledger_file_path)
+
+        with fileinput.FileInput(ledger_file_path, inplace=True, backup='.bak') as file:
             for line in file:
                 print(line.replace(
                     project_placeholder,
@@ -552,7 +579,7 @@ class DreamMate(object):
             args.project
         ], stdout=subprocess.PIPE)
 
-        std_out, std_err = p.communicate()
+        std_out, _ = p.communicate()
 
         lines = std_out.decode('utf-8').split("\n")[:-1]
 
@@ -620,8 +647,8 @@ class DreamMate(object):
             dry_run=self.actions_active_project_dry_run[action]
         )
 
-    def load_time_journal(self, mode = 'r'):
-        fileHandle = None;
+    def load_time_journal(self, mode = 'r', only_path=False):
+        fileHandle = None
         config_folder_path = os.path.expanduser("{}".format(CONFIG_FOLDER))
         ledger_file_path = "{}/time.ledger".format(config_folder_path)
 
@@ -631,6 +658,9 @@ class DreamMate(object):
 
             fileHandle = open(ledger_file_path, "w")
             fileHandle.write("")
+
+        if only_path:
+            return ledger_file_path
 
         return open(ledger_file_path, mode)
 
