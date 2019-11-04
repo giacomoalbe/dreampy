@@ -560,7 +560,9 @@ class DreamMate(object):
             exit(1)
 
         context = list(choosen_task.contexts)[0]
-        commit_msg = "{} | {}".format(context, choosen_task.tags['task'].replace("_", " "))
+        payload = choosen_task.tags['task'].replace("_", " ")
+
+        commit_msg = "{} | {}".format(context, payload)
 
         active_project_conf = self.load_project_configuration(self.active_project)
 
@@ -598,7 +600,7 @@ class DreamMate(object):
         # Substitude each occurrence of ###<current_project>### with
         # <current_project>  <message>
         project_placeholder = "###{}###".format(self.active_project.name)
-        project_account_payload = "{}  {}".format(self.active_project.name, commit_msg)
+        project_account_payload = "{}:{}  {}".format(self.active_project.name, context, payload)
 
         ledger_file_path = self.load_time_journal(mode='r', only_path = True)
 
