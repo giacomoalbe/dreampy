@@ -624,15 +624,20 @@ class DreamMate(object):
             usage="dm log <project> [<args>]"
         )
 
-        parser.add_argument('project', help="Project to check time entries of")
+        parser.add_argument(
+            'project',
+            help="Project to check time entries of"
+        )
 
         args = parser.parse_args(sys.argv[2:])
+
+        ledger_file_path = os.path.expanduser("{}/{}".format(CONFIG_FOLDER, "time.ledger"))
 
         p = subprocess.Popen([
             'ledger',
             'reg',
             '-f',
-            'time.ledger',
+            ledger_file_path,
             '--format',
             '%d|%15a|%-40P|%8t|\n',
             '--date-format',
