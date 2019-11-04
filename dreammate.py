@@ -230,6 +230,13 @@ class TaskManager(object):
         )
 
         parser.add_argument(
+            "-a",
+            "--all",
+            action="store_true",
+            help="Show all tasks (completed and to be done)"
+        )
+
+        parser.add_argument(
             "-n",
             "--number",
             type=int,
@@ -240,6 +247,7 @@ class TaskManager(object):
 
         limit = -1
         project: ActiveProject = self.active_project
+        all_tasks: bool = False
 
         if args.number:
             limit = args.number
@@ -247,11 +255,17 @@ class TaskManager(object):
         if args.project:
             project = ActiveProject(args.project)
 
-        tasks = self.get_tasks_list(project, limit)
+        if args.all:
+            all_tasks = True
+
+        tasks = self.get_tasks_list(project, limit, all_tasks)
 
         print(tasks.table)
 
-    def get_tasks_list(self, project: ActiveProject, limit: int, only_ascii: bool = False):
+    def get_tasks_list(self, project: ActiveProject, limit: int, all_tasks: bool = False, only_ascii: bool = False):
+        """
+        Return not done tasks by default, all only if asked
+        """
         todo_file = self.load_todo_file(project)
 
         if len(todo_file.todo_entries) == 0:
@@ -266,6 +280,9 @@ class TaskManager(object):
         for index, entry  in enumerate(todo_file.todo_entries):
             if limit > -1 and index == limit:
                 break
+
+            if not all_tasks and entry.completed:
+                continue
 
             formatted_date = datetime.strptime(entry.created_date, "%Y-%m-%d")
             formatted_date = datetime.strftime(formatted_date, "%d/%m/%y")
@@ -551,8 +568,6 @@ class DreamMate(object):
                 ), end='')
 
         self.doStart(self.active_project, end_time + timedelta(seconds=10))
-
-        print("Committing project: {} with message: {}".format(self.active_project, commit_msg))
 
     def current(self):
         print("Current project: {}".format(self.active_project))
