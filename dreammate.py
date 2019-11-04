@@ -538,7 +538,7 @@ class DreamMate(object):
         # Substitude each occurrence of ###<current_project>### with
         # <current_project>  <message>
         project_placeholder = "###{}###".format(self.active_project.name)
-        project_account_payload = "{}  {}".format(self.active_project.name, args.message)
+        project_account_payload = "{}  {}".format(self.active_project.name, commit_msg)
 
         ledger_file_path = self.load_time_journal(mode='r', only_path = True)
         print(ledger_file_path)
