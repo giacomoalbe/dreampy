@@ -263,6 +263,37 @@ class TaskManager(object):
 
         print(tasks.table)
 
+    def delete(self):
+        parser = argparse.ArgumentParser(
+            description="Delete a task from a project (defaults to active project)",
+            usage="dm tasks delete [-h] [-p <project_name>]"
+        )
+
+        parser.add_argument(
+            "-p",
+            "--project",
+            help="Project to show all tasks of"
+        )
+
+        args, _ = parser.parse_known_args(self.cli_args)
+
+        project = None
+
+        if args.project:
+            project = ActiveProject(args.project)
+
+        choosen_task = self.choose_active_task(project)
+
+        if not choosen_task:
+            print("Cancel action")
+            exit(1)
+
+        todo_file = self.load_todo_file(project)
+        todo_file.remove_entry(choosen_task)
+        todo_file.save()
+
+        print("Task deleted")
+
     def get_tasks_list(self, project: ActiveProject, limit: int, all_tasks: bool = False, only_ascii: bool = False):
         """
         Return not done tasks by default, all only if asked
@@ -320,9 +351,6 @@ class TaskManager(object):
         except:
             return None
 
-    def delete(self):
-        pass
-
     def load_todo_file(self, project: ActiveProject):
         if project == None:
             print("ERROR: No active project & no project set. Use -p to select a project")
@@ -354,6 +382,83 @@ class TaskManager(object):
 
         print("{} tasks saved in project {}".format(len(tasks), project.name))
         exit(0)
+
+    def choose_active_task(self, project: ActiveProject):
+        tasks = self.get_tasks_list(project, -1)
+
+        t = Terminal()
+
+        selected_task_index = -1
+        save_choice = False
+        is_tasks_loop = True
+        char = 0
+
+        while is_tasks_loop:
+            print("")
+            print("Select a task to commit using arrows")
+            print("{}Press Enter to save{}".format(t.green, t.normal))
+            print("{}Q or X to discard{}".format(t.red, t.normal))
+            print(tasks.table)
+
+            if selected_task_index != -1:
+                selected_task_description = tasks.table_data[selected_task_index+1][5]
+            else:
+                selected_task_description = "No task selected"
+
+            print("")
+            print(" " * t.width, end="\r")
+            print("{}Choosen task:{} {}".format(t.bold, t.normal, selected_task_description))
+
+            char = getch.getch()
+
+            # Up arrow
+            if ord(char) == 65:
+                if selected_task_index != -1:
+                    # Unselect previousely selected index
+                    tasks.table_data[selected_task_index + 1][0] = ""
+
+                selected_task_index -= 1
+                selected_task_index = max(selected_task_index, 0)
+
+                tasks.table_data[selected_task_index + 1][0] = "*"
+
+            # Down arrow
+            elif ord(char) == 66:
+                if selected_task_index != -1:
+                    # Unselect previousely selected index
+                    tasks.table_data[selected_task_index + 1][0] = ""
+
+                selected_task_index += 1
+                selected_task_index = min(selected_task_index, len(tasks.table_data) - 1 - 1)
+
+                tasks.table_data[selected_task_index + 1][0] = "*"
+
+            elif ord(char) == 10:
+                # Enter
+                save_choice = True
+                is_tasks_loop = False
+            elif ord(char) == 113:
+                # q
+                save_choice == False
+                is_tasks_loop = False
+
+            if is_tasks_loop:
+                # Account for selected task reminder
+                print(t.move_up * 2, end='\r')
+                # Account for task list
+                print(t.move_up * len(tasks.table.split("\n")), end="\r")
+                # Account for header
+                print(t.move_up * 4, end='\r')
+
+        choosen_task = None
+
+        if save_choice:
+            choosed_task_id = tasks.table_data[selected_task_index+1][1]
+
+            # Task look up
+            choosen_task = self.get_task(project, choosed_task_id)
+
+        return choosen_task
 
 class DreamMate(object):
     """
@@ -448,84 +553,11 @@ class DreamMate(object):
             print("dm restart -d <restart_date>")
             exit(1)
 
-        tasks = self.task_manager.get_tasks_list(self.active_project, -1)
+        choosen_task = self.task_manager.choose_active_task(self.active_project)
 
-        t = Terminal()
-
-        selected_task_index = -1
-        save_choice = False
-        is_tasks_loop = True
-        char = 0
-
-        while is_tasks_loop:
-            print("")
-            print("Select a task to commit using arrows")
-            print("{}Press Enter to save{}".format(t.green, t.normal))
-            print("{}Q or X to discard{}".format(t.red, t.normal))
-            print(tasks.table)
-
-            if selected_task_index != -1:
-                selected_task_description = tasks.table_data[selected_task_index+1][5]
-            else:
-                selected_task_description = "No task selected"
-
-            print("")
-            print(" " * t.width, end="\r")
-            print("{}Choosen task:{} {}".format(t.bold, t.normal, selected_task_description))
-
-            char = getch.getch()
-
-            # Up arrow
-            if ord(char) == 65:
-                if selected_task_index != -1:
-                    # Unselect previousely selected index
-                    tasks.table_data[selected_task_index + 1][0] = ""
-
-                selected_task_index -= 1
-                selected_task_index = max(selected_task_index, 0)
-
-                tasks.table_data[selected_task_index + 1][0] = "*"
-
-            # Down arrow
-            elif ord(char) == 66:
-                if selected_task_index != -1:
-                    # Unselect previousely selected index
-                    tasks.table_data[selected_task_index + 1][0] = ""
-
-                selected_task_index += 1
-                selected_task_index = min(selected_task_index, len(tasks.table_data) - 1 - 1)
-
-                tasks.table_data[selected_task_index + 1][0] = "*"
-
-            elif ord(char) == 10:
-                # Enter
-                save_choice = True
-                is_tasks_loop = False
-            elif ord(char) == 113:
-                # q
-                save_choice == False
-                is_tasks_loop = False
-
-            if is_tasks_loop:
-                # Account for selected task reminder
-                print(t.move_up * 2, end='\r')
-                # Account for task list
-                print(t.move_up * len(tasks.table.split("\n")), end="\r")
-                # Account for header
-                print(t.move_up * 4, end='\r')
-
-        choosen_task = None
-
-        if save_choice:
-            print("Saving choice")
-
-            choosed_task_id = tasks.table_data[selected_task_index+1][1]
-
-            # Task look up
-            choosen_task = self.task_manager.get_task(self.active_project, choosed_task_id)
-        else:
-            print("Cancel choice")
-            exit(0)
+        if not choosen_task:
+            print("Cancel action")
+            exit(1)
 
         context = list(choosen_task.contexts)[0]
         commit_msg = "{} | {}".format(context, choosen_task.tags['task'].replace("_", " "))
@@ -569,7 +601,6 @@ class DreamMate(object):
         project_account_payload = "{}  {}".format(self.active_project.name, commit_msg)
 
         ledger_file_path = self.load_time_journal(mode='r', only_path = True)
-        print(ledger_file_path)
 
         with fileinput.FileInput(ledger_file_path, inplace=True, backup='.bak') as file:
             for line in file:
@@ -579,6 +610,8 @@ class DreamMate(object):
                 ), end='')
 
         self.doStart(self.active_project, end_time + timedelta(seconds=10))
+
+        print("Task committed successfully")
 
     def current(self):
         print("Current project: {}".format(self.active_project))
@@ -663,6 +696,7 @@ class DreamMate(object):
 
     def create(self):
         print("Creating project configuration")
+
         name: str = ""
         root: str = ""
         contexts: List = []
@@ -790,7 +824,6 @@ class DreamMate(object):
     def load_project_configuration(self, project_name):
         try:
             config_file_path = os.path.expanduser("{}/{}.yaml".format(CONFIG_FOLDER, project_name.name))
-            print(config_file_path)
             file_content = open(config_file_path, 'r')
 
             try:
