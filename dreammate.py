@@ -24,6 +24,7 @@ usage_string = '''
 dm <action> [<args>]
 
 Available actions:
+  create    Create project coniguration file from guided procedure
   start     Start tracking time for a given project
   pause     Pause current tracking by closing current time entry (with placeholder)
   commit    Ends currently open (last) time entry with the appropriate payload
@@ -368,6 +369,7 @@ class DreamMate(object):
         "current": False,
         "restart": True,
         "tasks": True,
+        "create": True,
     }
 
     def __init__(self):
@@ -463,7 +465,7 @@ class DreamMate(object):
             print(tasks.table)
 
             if selected_task_index != -1:
-                selected_task_description = tasks.table_data[selected_task_index+1][4]
+                selected_task_description = tasks.table_data[selected_task_index+1][5]
             else:
                 selected_task_description = "No task selected"
 
@@ -530,9 +532,18 @@ class DreamMate(object):
 
         active_project_conf = self.load_project_configuration(self.active_project)
 
-        if active_project_conf['isCode']:
+        task_context = None
+        for project_context in active_project_conf['contexts']:
+            if project_context['code'] == context:
+                task_context = project_context
+
+        if task_context == None:
+            print("ERROR: Context {} is not a context for project {}".format(context, self.active_project.name))
+            exit(1)
+
+        if task_context['isGit']:
             commit_commands = get_scm_commit_commands(
-                active_project_conf['scm'],
+                "git",
                 commit_msg
             )
 
@@ -650,6 +661,50 @@ class DreamMate(object):
     def tasks(self):
         self.task_manager.parse_args(self.active_project, sys.argv[2:])
 
+    def create(self):
+        print("Creating project configuration")
+        name: str = ""
+        root: str = ""
+        contexts: List = []
+
+        name = input("Project name: ")
+        root = input("Project root (~ aware): ")
+
+        while True:
+            context = {}
+
+            context_name: str = input("Context name (q to quit): ")
+
+            if context_name.strip().lower() == 'q':
+                break
+
+            context_code: str = input("Context code (max 3 chars): ")
+            context_is_git = input("Context is code related? (y/N): ")
+
+            context_code = context_code[:3]
+            context_is_git = True if context_is_git.strip().lower() == 'y' else False
+
+            contexts.append({
+                "name": context_name,
+                "code": context_code,
+                "isGit": context_is_git
+            })
+
+        project = {
+            "name": name,
+            "root": root,
+            "contexts": contexts
+        }
+
+        config_file_path = os.path.expanduser("{}/{}.yaml".format(CONFIG_FOLDER, project['name']))
+        config_file_handle = open(config_file_path, "w+")
+
+        yaml.dump(project, config_file_handle, default_flow_style=False)
+
+        config_file_handle.close()
+
+        print("Project {} configuration created successfully!".format(project['name']))
+
     # UTILS
     def store_active_project_or_exit(self, action):
         self.active_project = None
@@ -734,7 +789,9 @@ class DreamMate(object):
 
     def load_project_configuration(self, project_name):
         try:
-            file_content = open("{}.yaml".format(project_name.name), 'r')
+            config_file_path = os.path.expanduser("{}/{}.yaml".format(CONFIG_FOLDER, project_name.name))
+            print(config_file_path)
+            file_content = open(config_file_path, 'r')
 
             try:
                 config = yaml.safe_load(file_content)

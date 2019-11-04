@@ -1,0 +1,24 @@
+# Name of the project
+name: "project_name"
+
+# Root of the project
+root: '~/root/of/the/project/'
+
+# List of contexts
+contexts:
+  - name: "development"
+    # 3 chars wide stage code
+    code: "DEV"
+    # Wheter this context is code related
+    isGit: true
+  - name: "bugfix"
+    # 3 chars wide stage code
+    code: "BUG"
+    # Wheter this context is code related
+    isGit: true
+  - name: "documentation"
+    code: "DOC"
+    isGit: true
+  - name: "analysis"
+    code: "ANY"
+    isGit: false
