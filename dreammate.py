@@ -552,7 +552,7 @@ class DreamMate(object):
 
         self.doStart(self.active_project, end_time + timedelta(seconds=10))
 
-        print("Committing project: {} with message: {}".format(self.active_project, args.message))
+        print("Committing project: {} with message: {}".format(self.active_project, commit_msg))
 
     def current(self):
         print("Current project: {}".format(self.active_project))
